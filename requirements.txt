@@ -1,0 +1,6 @@
+pandas
+numpy
+wordcloud
+shap
+vaderSentiment
+scikit-learn
