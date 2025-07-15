@@ -1,0 +1,91 @@
+import pandas as pd
+import numpy as np
+from wordcloud import WordCloud
+import shap
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.naive_bayes import MultinomialNB
+
+from .trainee_data import df 
+
+# VADER setup
+analyzer = SentimentIntensityAnalyzer()
+
+def get_sentiment(text):
+    scores = analyzer.polarity_scores(text)
+    compound = scores['compound']
+    if compound >= 0.05:
+        mood = "🙂 Positive"
+    elif compound <= -0.05:
+        mood = "🙁 Negative"
+    else:
+        mood = "😐 Neutral"
+    return mood, compound
+
+def generate_wordcloud(text):
+    wc = WordCloud(width=600, height=400, background_color='white').generate(text)
+    return wc
+
+# Vectorizer
+vectorizer = CountVectorizer(ngram_range=(1, 3), max_features=3000, min_df=1)
+X = vectorizer.fit_transform(df['text'])
+X_dense = X.toarray()
+y = df['label']
+
+# Classifier
+classifier = MultinomialNB()
+classifier.fit(X, y)
+
+# Classifier prediction
+def predict_emotion(text):
+    vec = vectorizer.transform([text])
+    return classifier.predict(vec)[0]
+
+def model_predict(X):
+    return classifier.predict_proba(X)
+
+# SHAP KernelExplainer with dense matrix
+explainer = shap.KernelExplainer(model_predict, X_dense)
+
+def explain_emotion(text):
+    try:
+        # Vectorize journal entry
+        vec_sparse = vectorizer.transform([text])
+        vec = vec_sparse.toarray()
+        feature_names = vectorizer.get_feature_names_out()
+
+        # Use emotional dataset as SHAP background
+        explainer = shap.KernelExplainer(model_predict, X_dense[:50])
+        shap_values = explainer.shap_values(vec)
+
+        # Predict emotion
+        predicted_label = classifier.predict(vec)[0]
+        class_index = list(classifier.classes_).index(predicted_label)
+
+        # Get impact scores for predicted class
+        word_scores_matrix = shap_values[0][:, class_index]
+
+        # Get active tokens from user input
+        activated_tokens = set(vectorizer.inverse_transform(vec_sparse)[0])
+
+        # Rank and filter
+        top_indices = np.argsort(np.abs(word_scores_matrix))[::-1]
+        top_features = []
+
+        for i in top_indices:
+            token = feature_names[i]
+            score = float(word_scores_matrix[i])
+            if token in activated_tokens:
+                top_features.append((token, score))
+            if len(top_features) >= 10:
+                break
+
+        if not top_features:
+            return [("Your journal felt emotionally smooth — no strong signals detected.", 0.0)]
+
+        return top_features
+
+    except Exception as e:
+        print("💥 SHAP explainability failed:", str(e))
+        return [("Explanation unavailable", 0.0)]
+    
