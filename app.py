@@ -20,7 +20,8 @@ if st.button("Analyze Mood") and journal.strip():
     st.subheader(f'Classifier mood: {clf_mood}')
 
     # Explain classifier prediction using SHAP
-    explanation = explain_emotion(cleaned_entry)
+    with st.spinner("Explaining emotion..."):
+        explanation = explain_emotion(cleaned_entry)
 
     # Display explanation
     st.subheader("🔍 Why this mood?")

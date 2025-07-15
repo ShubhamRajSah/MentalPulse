@@ -44,10 +44,6 @@ def predict_emotion(text):
 def model_predict(X):
     return classifier.predict_proba(X)
 
-# SHAP KernelExplainer with dense matrix
-X_summary=shap.sample(X_dense, 50)
-explainer = shap.KernelExplainer(model_predict, X_summary)
-
 def explain_emotion(text):
     try:
         # Vectorize journal entry
@@ -56,6 +52,8 @@ def explain_emotion(text):
         feature_names = vectorizer.get_feature_names_out()
 
         # Use emotional dataset as SHAP background
+        X_summary=shap.sample(X_dense, 50)
+        explainer = shap.KernelExplainer(model_predict, X_summary)
         shap_values = explainer.shap_values(vec)
 
         # Predict emotion
