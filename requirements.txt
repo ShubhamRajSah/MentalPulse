@@ -4,3 +4,4 @@ wordcloud
 shap
 vaderSentiment
 scikit-learn
+nltk
