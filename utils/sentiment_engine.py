@@ -46,27 +46,21 @@ def model_predict(X):
 
 def explain_emotion(text):
     try:
-        # Vectorize journal entry
         vec_sparse = vectorizer.transform([text])
         vec = vec_sparse.toarray()
         feature_names = vectorizer.get_feature_names_out()
 
-        # Use emotional dataset as SHAP background
-        X_summary=shap.sample(X_dense, 50)
+        # ⏳ Move explainer initialization inside function
+        X_summary = shap.sample(X_dense, 50)
         explainer = shap.KernelExplainer(model_predict, X_summary)
-        shap_values = explainer.shap_values(vec)
 
-        # Predict emotion
+        shap_values = explainer.shap_values(vec)
         predicted_label = classifier.predict(vec)[0]
         class_index = list(classifier.classes_).index(predicted_label)
 
-        # Get impact scores for predicted class
         word_scores_matrix = shap_values[0][:, class_index]
-
-        # Get active tokens from user input
         activated_tokens = set(vectorizer.inverse_transform(vec_sparse)[0])
 
-        # Rank and filter
         top_indices = np.argsort(np.abs(word_scores_matrix))[::-1]
         top_features = []
 
@@ -86,4 +80,3 @@ def explain_emotion(text):
     except Exception as e:
         print("💥 SHAP explainability failed:", str(e))
         return [("Explanation unavailable", 0.0)]
-    
