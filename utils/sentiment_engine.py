@@ -51,18 +51,18 @@ def explain_emotion(text):
         vec = vec_sparse.toarray()
         feature_names = vectorizer.get_feature_names_out()
 
-        # Lazy SHAP setup (runs only when called)
+        # ⚡ Faster SHAP explainer for scikit-learn models
         X_summary = shap.sample(X_dense, 50)
-        explainer = shap.KernelExplainer(model_predict, X_summary)
+        explainer = shap.Explainer(classifier.predict_proba, X_summary)
 
-        shap_values = explainer.shap_values(vec, silent=True)
+        shap_values = explainer(vec)
 
         predicted_label = classifier.predict(vec)[0]
         if predicted_label not in classifier.classes_:
             return [("Unknown emotion detected.", 0.0)]
 
         class_index = list(classifier.classes_).index(predicted_label)
-        word_scores_matrix = shap_values[0][:, class_index]
+        word_scores_matrix = shap_values.values[:, class_index]
 
         activated_tokens = set(vectorizer.inverse_transform(vec_sparse)[0])
         top_indices = np.argsort(np.abs(word_scores_matrix))[::-1]
