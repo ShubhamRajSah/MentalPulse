@@ -84,3 +84,4 @@ def explain_emotion(text):
     except Exception as e:
         print("💥 SHAP explainability failed:", str(e))
         return [("Explanation unavailable", 0.0)]
+    
