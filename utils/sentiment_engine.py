@@ -45,60 +45,47 @@ def predict_emotion(text):
 def model_predict(X):
     return classifier.predict_proba(X)
 
-def explain_emotion(text):
-    try:
-        vec_sparse = vectorizer.transform([text])
-        vec = vec_sparse.toarray()
-        feature_names = vectorizer.get_feature_names_out()
+def explain_emotion(text, classifier, vectorizer, explainer, class_names):
 
-        # Dynamically set SHAP evaluation budget
-        num_features = vec.shape[1]
-        min_evals = 2 * num_features + 1
+    # Vectorize input
+    vec_sparse = vectorizer.transform([text])
+    vec_dense = vec_sparse.toarray()
 
-        # ✅ Use Independent masker for stability
-        X_summary = shap.sample(X_dense, 50)
-        masker = shap.maskers.Independent(X_summary)
-        explainer = shap.explainers.Permutation(classifier.predict_proba, masker)
+    # Predict emotion class
+    predicted_label = classifier.predict(vec_dense)[0]
+    predicted_class_index = list(classifier.classes_).index(predicted_label)
 
-        # Run SHAP with logging
-        shap_values = explainer(vec, max_evals=min_evals)
-        print("🔍 SHAP values shape:", shap_values.values.shape)
+    # Get SHAP values
+    values = explainer(vec_dense)
+    
+    # Debugging outputs
+    print("🧠 Input text:", text)
+    print("📦 Predicted label:", predicted_label)
+    print("📊 SHAP values shape:", values.shape)
 
-        predicted_label = classifier.predict(vec)[0]
-        if predicted_label not in classifier.classes_:
-            return [("Unknown emotion detected.", 0.0)]
+    # Check if SHAP values are valid
+    if len(values.shape) != 3 or predicted_class_index >= values.shape[1]:
+        print("⚠ SHAP output shape mismatch or invalid class index.")
+        return [("Could not interpret emotional signals due to model mismatch.", 0.0)]
 
-        class_index = list(classifier.classes_).index(predicted_label)
+    # Get SHAP scores for predicted class
+    word_scores_matrix = values[0][predicted_class_index]
+    feature_names = vectorizer.get_feature_names_out()
 
-        # 🛡 Handle SHAP output shape safely
-        values = shap_values.values
-        if len(values.shape) == 1:
-            word_scores_matrix = values
-        elif values.shape[0] == 1 and values.shape[1] > class_index:
-            word_scores_matrix = values[0, class_index]
-        elif values.shape[0] > 1 and values.shape[1] > class_index:
-            word_scores_matrix = values[:, class_index]
-        else:
-            print("⚠ SHAP output dimension mismatch.")
-            return [("Explanation unavailable due to shape mismatch.", 0.0)]
+    # Get activated tokens
+    activated_tokens = set(vectorizer.inverse_transform(vec_sparse)[0])
+    print("🎯 Activated tokens:", activated_tokens)
 
-        activated_tokens = set(vectorizer.inverse_transform(vec_sparse)[0])
-        top_indices = np.argsort(np.abs(word_scores_matrix))[::-1]
-        top_features = []
+    if not activated_tokens:
+        print("⚠ No recognizable tokens found in vectorizer.")
+        return [("No recognizable emotional tokens found in your journal.", 0.0)]
 
-        for i in top_indices:
-            token = feature_names[i]
-            score = float(word_scores_matrix[i])
-            if token in activated_tokens:
-                top_features.append((token, score))
-            if len(top_features) >= 10:
-                break
+    # Pair tokens with SHAP scores
+    token_scores = [(token, word_scores_matrix[feature_names.tolist().index(token)])
+                    for token in activated_tokens if token in feature_names]
 
-        if not top_features:
-            return [("Your journal felt emotionally smooth — no strong signals detected.", 0.0)]
+    # Sort by score
+    token_scores.sort(key=lambda x: abs(x[1]), reverse=True)
 
-        return top_features
-
-    except Exception as e:
-        print("💥 SHAP explainability failed:", str(e))
-        return [("Explanation unavailable", 0.0)]
+    # Debug top scores
+    print("📈 Top SHAP scores")
