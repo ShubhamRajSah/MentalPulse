@@ -51,18 +51,28 @@ def explain_emotion(text):
         vec = vec_sparse.toarray()
         feature_names = vectorizer.get_feature_names_out()
 
-        # ⚡ Faster SHAP explainer for scikit-learn models
+        # Use Independent masker for stability
         X_summary = shap.sample(X_dense, 50)
-        explainer = shap.Explainer(classifier.predict_proba, X_summary)
+        masker = shap.maskers.Independent(X_summary)
+        explainer = shap.explainers.Permutation(classifier.predict_proba, masker)
 
+        # Run SHAP
         shap_values = explainer(vec)
+        values = shap_values.values
+        print("🔍 SHAP values shape:", values.shape)
 
         predicted_label = classifier.predict(vec)[0]
-        if predicted_label not in classifier.classes_:
-            return [("Unknown emotion detected.", 0.0)]
-
         class_index = list(classifier.classes_).index(predicted_label)
-        word_scores_matrix = shap_values.values[:, class_index]
+
+        # Handle SHAP output shape safely
+        if len(values.shape) == 1:
+            word_scores_matrix = values
+        elif values.shape[0] == 1 and values.shape[1] > class_index:
+            word_scores_matrix = values[0, class_index]
+        elif values.shape[0] > 1 and values.shape[1] > class_index:
+            word_scores_matrix = values[:, class_index]
+        else:
+            return [("Explanation unavailable due to shape mismatch.", 0.0)]
 
         activated_tokens = set(vectorizer.inverse_transform(vec_sparse)[0])
         top_indices = np.argsort(np.abs(word_scores_matrix))[::-1]
@@ -84,4 +94,3 @@ def explain_emotion(text):
     except Exception as e:
         print("💥 SHAP explainability failed:", str(e))
         return [("Explanation unavailable", 0.0)]
-    
