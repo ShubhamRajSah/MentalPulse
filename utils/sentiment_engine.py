@@ -51,20 +51,27 @@ def explain_emotion(text):
         vec = vec_sparse.toarray()
         feature_names = vectorizer.get_feature_names_out()
 
-        # Use Independent masker for stability
+        # Dynamically set SHAP evaluation budget
+        num_features = vec.shape[1]
+        min_evals = 2 * num_features + 1
+
+        # ✅ Use Independent masker for stability
         X_summary = shap.sample(X_dense, 50)
         masker = shap.maskers.Independent(X_summary)
         explainer = shap.explainers.Permutation(classifier.predict_proba, masker)
 
-        # Run SHAP
-        shap_values = explainer(vec)
-        values = shap_values.values
-        print("🔍 SHAP values shape:", values.shape)
+        # Run SHAP with logging
+        shap_values = explainer(vec, max_evals=min_evals)
+        print("🔍 SHAP values shape:", shap_values.values.shape)
 
         predicted_label = classifier.predict(vec)[0]
+        if predicted_label not in classifier.classes_:
+            return [("Unknown emotion detected.", 0.0)]
+
         class_index = list(classifier.classes_).index(predicted_label)
 
-        # Handle SHAP output shape safely
+        # 🛡 Handle SHAP output shape safely
+        values = shap_values.values
         if len(values.shape) == 1:
             word_scores_matrix = values
         elif values.shape[0] == 1 and values.shape[1] > class_index:
@@ -72,6 +79,7 @@ def explain_emotion(text):
         elif values.shape[0] > 1 and values.shape[1] > class_index:
             word_scores_matrix = values[:, class_index]
         else:
+            print("⚠ SHAP output dimension mismatch.")
             return [("Explanation unavailable due to shape mismatch.", 0.0)]
 
         activated_tokens = set(vectorizer.inverse_transform(vec_sparse)[0])
